@@ -4,7 +4,7 @@ from aiogram.types import ReplyKeyboardMarkup, InlineKeyboardMarkup, InlineKeybo
 from aiogram.utils import executor
 from keep_alive import keep_alive
 keep_alive()
-TOKEN = "7500083978:AAEFH8tyUpwZSNlex5rmLIBdXmXCkT1cs8I"
+TOKEN ="7676128587:AAE6M292x2NcccUUxnL6feYx4YCrBX4xmog"
 bot = Bot(token=TOKEN)
 dp = Dispatcher(bot)
 
@@ -12,10 +12,12 @@ dp = Dispatcher(bot)
 menu_buttons = ReplyKeyboardMarkup(resize_keyboard=True)
 menu_buttons.add("❌⭕ X O", "✊✌️✋ TQQ")
 menu_buttons.add("🔢 Son topish", "🔠 So‘z topish")
-
+active_users = set()
 # **START KOMANDASI**
 @dp.message_handler(commands=['start'])
 async def start_command(message: types.Message):
+    user_id = message.from_user.id
+    active_users.add(user_id) #
     start_text = ("🎮 *Mini o‘yinlar botiga xush kelibsiz!*\n\n"
                   "📌 Quyidagi o‘yinlardan birini tanlang:\n\n"
                   "✅ *❌⭕ X O* — Klassik X O o‘yini\n"
@@ -55,17 +57,29 @@ async def xo_move(call: types.CallbackQuery):
         games[chat_id][move] = "❌"
         await show_xo_board(chat_id)
 
-        if check_winner(games[chat_id], "❌"):
+        # G'olibni tekshirish
+        result = check_winner(games[chat_id], "❌")
+        if result == True:
             await bot.send_message(chat_id, "🎉 Siz yutdingiz!")
             del games[chat_id]
             return
+        elif result == "draw":
+            await bot.send_message(chat_id, "🤝 Durrang! Hech kim yutmadi.")
+            del games[chat_id]
+            return
 
+        # Bot harakat qiladi
         bot_move = best_move(games[chat_id])
         games[chat_id][bot_move] = "⭕"
         await show_xo_board(chat_id)
 
-        if check_winner(games[chat_id], "⭕"):
+        # Bot yutganini tekshirish
+        result = check_winner(games[chat_id], "⭕")
+        if result == True:
             await bot.send_message(chat_id, "🤖 Bot yutdi!")
+            del games[chat_id]
+        elif result == "draw":
+            await bot.send_message(chat_id, "🤝 Durrang! Hech kim yutmadi.")
             del games[chat_id]
 
 def best_move(board):
@@ -81,7 +95,12 @@ def best_move(board):
 
 def check_winner(board, player):
     win_positions = [(0,1,2), (3,4,5), (6,7,8), (0,3,6), (1,4,7), (2,5,8), (0,4,8), (2,4,6)]
-    return any(board[a] == board[b] == board[c] == player for a, b, c in win_positions)
+    if any(board[a] == board[b] == board[c] == player for a, b, c in win_positions):
+        return True
+    # Agar barcha kataklar to'ldirilgan bo'lsa, durrang
+    if "_" not in board and "⬜" not in board:
+        return "draw"
+    return False
 
 # **So‘z topish o‘yini**
 words = ["smartfon", "blog", "video", "robot", "montaj", "tizim", "funksiya"]
@@ -215,6 +234,32 @@ async def tqq_result(call: types.CallbackQuery):
         result = "🤖 Men yutdim!"
 
     await bot.send_message(call.message.chat.id, f"👤 Siz: {user_choice}\n🤖 Men: {bot_choice}\n🏆 Natija: {result}")
+    from aiogram import types
+
+ADMIN_ID = 5984770229 # Admin ID-si
+
+def is_admin(user_id: int) -> bool:
+    return user_id == ADMIN_ID
+
+@dp.message_handler(commands=['send'])
+async def send_to_all(message: types.Message):
+    if not is_admin(message.from_user.id):
+        await message.reply("❌ Sizda bunday buyruqni bajarish huquqi yo'q!")
+        return
+
+    text = message.get_args()  # /send dan keyingi matnni olish
+    if not text:
+        await message.reply("⚠ Iltimos, xabar matnini kiriting:\n/send <matn>")
+        return
+
+    # Barcha foydalanuvchilarga xabar yuborish
+    for user_id in active_users:  # active_users - botdan foydalanayotgan userlar ro'yxati
+        try:
+            await bot.send_message(user_id, text)
+        except Exception as e:
+            print(f"Xatolik {user_id} ga xabar yuborishda: {e}")
+
+    await message.reply(f"✅ Xabar {len(active_users)} ta foydalanuvchiga yuborildi!")
 
 if __name__ == "__main__":
     executor.start_polling(dp, skip_updates=True)
