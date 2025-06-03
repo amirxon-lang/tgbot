@@ -2,7 +2,8 @@ import random
 from aiogram import Bot, Dispatcher, types
 from aiogram.types import ReplyKeyboardMarkup, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.utils import executor
-
+from keep_alive import keep_alive
+keep_alive()
 TOKEN = "7500083978:AAEFH8tyUpwZSNlex5rmLIBdXmXCkT1cs8I"
 bot = Bot(token=TOKEN)
 dp = Dispatcher(bot)
