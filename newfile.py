@@ -353,4 +353,4 @@ async def show_top(message: types.Message):
 
 # Botni ishga tushurish
 if __name__ == "__main__":
-    executor.start_polling(dp)
+    executor.start_polling(dp,skip_updates=True)
