@@ -12,6 +12,10 @@ keep_alive()
 bot = Bot(token=os.environ.get('token'))
 dp = Dispatcher(bot)
 
+# Majburiy obuna kanali
+CHANNEL_USERNAME = "@rojer_joke"
+CHANNEL_LINK = "https://t.me/rojer_joke"
+
 # Asosiy menyu
 menu_buttons = ReplyKeyboardMarkup(resize_keyboard=True)
 menu_buttons.add("❌⭕ X O", "✊✌️✋ TQQ")
@@ -28,6 +32,18 @@ active_games = {
 user_stats = {}
 last_activity = {}
 
+# Top foydalanuvchilar (o'zgartirilmaydi)
+TOP_PLAYERS = {
+    1: ("Ayub10fcmobile", 70),
+    2: ("narimon4ik", 68),
+    3: ("Crocufont1", 41),
+    4: ("sirojiddinsalohiddinov", 40),
+    5: ("saidmuhammadrizo", 36),
+    6: ("M123456777789", 9),
+    7: ("Шахзода", 7),
+    8: ("NematovAyyub", 5)
+}
+
 # Spam nazorati
 async def check_spam(user_id: int):
     now = time.time()
@@ -36,15 +52,23 @@ async def check_spam(user_id: int):
     last_activity[user_id] = now
     return False
 
-# Statistikani yangilash
+# Kanalga obuna tekshirish
+async def check_subscription(user_id: int):
+    try:
+        member = await bot.get_chat_member(CHANNEL_USERNAME, user_id)
+        return member.status in ['member', 'administrator', 'creator']
+    except:
+        return False
+
+# Statistikani yangilash (-1 ochko qo'shildi)
 def update_stats(user_id: int, game_type: str, won: bool = True):
     if user_id not in user_stats:
         user_stats[user_id] = {
-            "total": {"played": 0, "won": 0},
-            "xo": {"played": 0, "won": 0},
-            "tqq": {"played": 0, "won": 0},
-            "guess": {"played": 0, "won": 0},
-            "word": {"played": 0, "won": 0}
+            "total": {"played": 0, "won": 0, "points": 0},
+            "xo": {"played": 0, "won": 0, "points": 0},
+            "tqq": {"played": 0, "won": 0, "points": 0},
+            "guess": {"played": 0, "won": 0, "points": 0},
+            "word": {"played": 0, "won": 0, "points": 0}
         }
     
     user_stats[user_id]["total"]["played"] += 1
@@ -53,6 +77,11 @@ def update_stats(user_id: int, game_type: str, won: bool = True):
     if won:
         user_stats[user_id]["total"]["won"] += 1
         user_stats[user_id][game_type]["won"] += 1
+        user_stats[user_id]["total"]["points"] += 1
+        user_stats[user_id][game_type]["points"] += 1
+    else:
+        user_stats[user_id]["total"]["points"] -= 1
+        user_stats[user_id][game_type]["points"] -= 1
 
 # Start komandasi
 @dp.message_handler(commands=['start'])
@@ -61,16 +90,45 @@ async def start(message: types.Message):
         await message.reply("⏳ Iltimos, 2 soniya kutib turing!")
         return
     
+    # Obunani tekshirish
+    if not await check_subscription(message.from_user.id):
+        markup = InlineKeyboardMarkup()
+        markup.add(InlineKeyboardButton("Kanalga obuna bo'lish", url=CHANNEL_LINK))
+        markup.add(InlineKeyboardButton("Tekshirish", callback_data="check_subscription"))
+        await message.reply(
+            f"🎮 Botdan foydalanish uchun {CHANNEL_USERNAME} kanaliga obuna bo'ling!\n"
+            "Obuna bo'lgach, 'Tekshirish' tugmasini bosing.",
+            reply_markup=markup
+        )
+        return
+    
     await message.reply(
         "🎮 O'yinlar botiga xush kelibsiz!\n\n"
         "Quyidagi o'yinlardan birini tanlang:",
         reply_markup=menu_buttons
     )
 
+# Obunani tekshirish uchun handler
+@dp.callback_query_handler(lambda c: c.data == "check_subscription")
+async def check_sub_callback(callback: types.CallbackQuery):
+    if await check_subscription(callback.from_user.id):
+        await callback.message.delete()
+        await callback.message.answer(
+            "🎮 O'yinlar botiga xush kelibsiz!\n\n"
+            "Quyidagi o'yinlardan birini tanlang:",
+            reply_markup=menu_buttons
+        )
+    else:
+        await callback.answer("Siz hali kanalga obuna bo'lmagansiz!", show_alert=True)
+
 # X O o'yini
 @dp.message_handler(lambda m: m.text == "❌⭕ X O")
 async def start_xo(message: types.Message):
     if await check_spam(message.from_user.id):
+        return
+    
+    if not await check_subscription(message.from_user.id):
+        await message.reply(f"⚠️ O'yinni ishlatish uchun kanalga obuna bo'ling: {CHANNEL_LINK}")
         return
     
     chat_id = message.chat.id
@@ -102,7 +160,7 @@ async def process_xo_move(callback: types.CallbackQuery):
     result = check_winner(active_games["xo"][chat_id], "❌")
     if result == "win":
         update_stats(callback.from_user.id, "xo", True)
-        await callback.message.answer("🎉 Siz yutdingiz!")
+        await callback.message.answer("🎉 Siz yutdingiz! +1 ochko")
         del active_games["xo"][chat_id]
         return
     elif result == "draw":
@@ -119,7 +177,8 @@ async def process_xo_move(callback: types.CallbackQuery):
         
         result = check_winner(active_games["xo"][chat_id], "⭕")
         if result == "win":
-            await callback.message.answer("🤖 Bot yutdi!")
+            update_stats(callback.from_user.id, "xo", False)
+            await callback.message.answer("🤖 Bot yutdi! -1 ochko")
             del active_games["xo"][chat_id]
         elif result == "draw":
             await callback.message.answer("🤝 Durrang!")
@@ -147,6 +206,10 @@ async def start_tqq(message: types.Message):
     if await check_spam(message.from_user.id):
         return
     
+    if not await check_subscription(message.from_user.id):
+        await message.reply(f"⚠️ O'yinni ishlatish uchun kanalga obuna bo'ling: {CHANNEL_LINK}")
+        return
+    
     markup = InlineKeyboardMarkup(row_width=3)
     markup.add(
         InlineKeyboardButton("✊", callback_data="tqq_rock"),
@@ -157,6 +220,10 @@ async def start_tqq(message: types.Message):
 
 @dp.callback_query_handler(lambda c: c.data.startswith('tqq_'))
 async def process_tqq(callback: types.CallbackQuery):
+    if not await check_subscription(callback.from_user.id):
+        await callback.message.answer(f"⚠️ O'yinni davom ettirish uchun kanalga obuna bo'ling: {CHANNEL_LINK}")
+        return
+    
     choices = {
         "tqq_rock": "✊",
         "tqq_scissors": "✌️",
@@ -171,10 +238,10 @@ async def process_tqq(callback: types.CallbackQuery):
     elif (user_choice == "✊" and bot_choice == "✌️") or \
          (user_choice == "✌️" and bot_choice == "✋") or \
          (user_choice == "✋" and bot_choice == "✊"):
-        result = "🎉 Siz yutdingiz!"
+        result = "🎉 Siz yutdingiz! +1 ochko"
         won = True
     else:
-        result = "🤖 Bot yutdi!"
+        result = "🤖 Bot yutdi! -1 ochko"
         won = False
     
     if won is not None:
@@ -190,6 +257,10 @@ async def start_guess_number(message: types.Message):
     if await check_spam(message.from_user.id):
         return
     
+    if not await check_subscription(message.from_user.id):
+        await message.reply(f"⚠️ O'yinni ishlatish uchun kanalga obuna bo'ling: {CHANNEL_LINK}")
+        return
+    
     markup = InlineKeyboardMarkup(row_width=3)
     markup.add(
         InlineKeyboardButton("1-10", callback_data="guess_10"),
@@ -200,6 +271,10 @@ async def start_guess_number(message: types.Message):
 
 @dp.callback_query_handler(lambda c: c.data.startswith('guess_'))
 async def set_guess_range(callback: types.CallbackQuery):
+    if not await check_subscription(callback.from_user.id):
+        await callback.message.answer(f"⚠️ O'yinni davom ettirish uchun kanalga obuna bo'ling: {CHANNEL_LINK}")
+        return
+    
     max_num = int(callback.data.split('_')[1])
     secret = random.randint(1, max_num)
     active_games["guess"][callback.message.chat.id] = {
@@ -226,20 +301,21 @@ async def check_guess(message: types.Message):
     else:
         update_stats(message.from_user.id, "guess", True)
         await message.reply(
-            f"🎉 To'g'ri! {game['secret']} sonini {game['attempts']} urinishda topdingiz!"
+            f"🎉 To'g'ri! {game['secret']} sonini {game['attempts']} urinishda topdingiz! +1 ochko"
         )
         del active_games["guess"][chat_id]
 
 # So'z topish o'yini
-# So'z topish o'yini uchun so'zlar ro'yxati
 words = ["smartfon", "blog", "video", "robot", "montaj", "tizim", "funksiya"]
-
-# O'yin holatlarini saqlash uchun dictionary
 word_games = {}
 
 @dp.message_handler(lambda message: message.text == "🔠 So'z topish")
 async def start_word_game(message: types.Message):
     if await check_spam(message.from_user.id):
+        return
+    
+    if not await check_subscription(message.from_user.id):
+        await message.reply(f"⚠️ O'yinni ishlatish uchun kanalga obuna bo'ling: {CHANNEL_LINK}")
         return
     
     chat_id = message.chat.id
@@ -269,6 +345,10 @@ async def show_word_board(chat_id):
 
 @dp.callback_query_handler(lambda call: call.data.startswith("word_"))
 async def process_word_guess(call: types.CallbackQuery):
+    if not await check_subscription(call.from_user.id):
+        await call.message.answer(f"⚠️ O'yinni davom ettirish uchun kanalga obuna bo'ling: {CHANNEL_LINK}")
+        return
+    
     chat_id = call.message.chat.id
     game = word_games.get(chat_id)
     if not game:
@@ -284,7 +364,7 @@ async def process_word_guess(call: types.CallbackQuery):
 
         if "_" not in game["masked"]:
             update_stats(call.from_user.id, "word", True)
-            await bot.send_message(chat_id, f"🎉 Siz so'zni topdingiz! So'z: {game['word']}")
+            await bot.send_message(chat_id, f"🎉 Siz so'zni topdingiz! So'z: {game['word']} +1 ochko")
             del word_games[chat_id]
             return
 
@@ -304,39 +384,24 @@ async def show_stats(message: types.Message):
     text = (
         "📊 Sizning statistikangiz:\n\n"
         f"🎮 Jami o'yinlar: {stats['total']['played']}\n"
-        f"🏆 G'alabalar: {stats['total']['won']}\n\n"
-        f"❌⭕ X O: {stats['xo']['won']}/{stats['xo']['played']}\n"
-        f"✊✌️✋ TQQ: {stats['tqq']['won']}/{stats['tqq']['played']}\n"
-        f"🔢 Son topish: {stats['guess']['won']}/{stats['guess']['played']}\n"
-        f"🔠 So'z topish: {stats['word']['won']}/{stats['word']['played']}"
+        f"🏆 G'alabalar: {stats['total']['won']}\n"
+        f"⭐ Ochko: {stats['total']['points']}\n\n"
+        f"❌⭕ X O: {stats['xo']['won']}/{stats['xo']['played']} (Ochko: {stats['xo']['points']})\n"
+        f"✊✌️✋ TQQ: {stats['tqq']['won']}/{stats['tqq']['played']} (Ochko: {stats['tqq']['points']})\n"
+        f"🔢 Son topish: {stats['guess']['won']}/{stats['guess']['played']} (Ochko: {stats['guess']['points']})\n"
+        f"🔠 So'z topish: {stats['word']['won']}/{stats['word']['played']} (Ochko: {stats['word']['points']})"
     )
     await message.reply(text)
 
-# Top foydalanuvchilar
+# Top foydalanuvchilar (o'zgartirilmaydi)
 @dp.message_handler(commands=['top'])
 async def show_top_players(message: types.Message):
     if await check_spam(message.from_user.id):
         return
     
-    if not user_stats:
-        await message.reply("Hali hech qanday statistika to'plalmagan!")
-        return
-    
-    top_players = sorted(
-        user_stats.items(),
-        key=lambda x: x[1]['total']['won'],
-        reverse=True
-    )[:10]
-    
     text = "🏆 Eng ko'p g'alaba qozonganlar:\n\n"
-    for i, (user_id, stats) in enumerate(top_players, 1):
-        try:
-            user = await bot.get_chat(user_id)
-            name = user.username or user.first_name
-        except:
-            name = f"Foydalanuvchi {user_id}"
-        
-        text += f"{i}. {name} - {stats['total']['won']} g'alaba\n"
+    for i, (name, wins) in TOP_PLAYERS.items():
+        text += f"{i}. {name} - {wins} g'alaba\n"
     
     await message.reply(text)
 
