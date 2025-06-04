@@ -231,62 +231,64 @@ async def check_guess(message: types.Message):
         del active_games["guess"][chat_id]
 
 # So'z topish o'yini
-words = ["python", "bot", "dastur", "algorithm", "telegram", "oyin", "smartfon"]
+# So'z topish o'yini uchun so'zlar ro'yxati
+words = ["smartfon", "blog", "video", "robot", "montaj", "tizim", "funksiya"]
 
-@dp.message_handler(lambda m: m.text == "🔠 So'z topish")
+# O'yin holatlarini saqlash uchun dictionary
+word_games = {}
+
+@dp.message_handler(lambda message: message.text == "🔠 So'z topish")
 async def start_word_game(message: types.Message):
     if await check_spam(message.from_user.id):
         return
     
-    word = random.choice(words)
-    letters = list(word)
+    chat_id = message.chat.id
+    hidden_word = random.choice(words)
+    masked_word = ["_"] * len(hidden_word)
+    letters = list(hidden_word)
     random.shuffle(letters)
-    
-    active_games["word"][message.chat.id] = {
-        "word": word,
-        "letters": letters,
-        "guessed": ["_"] * len(word),
-        "position": 0
+
+    word_games[chat_id] = {
+        "word": hidden_word,
+        "masked": masked_word,
+        "next_index": 0,
+        "remaining_letters": letters
     }
-    
-    await show_word_game(message.chat.id)
 
-async def show_word_game(chat_id):
-    game = active_games["word"][chat_id]
-    markup = InlineKeyboardMarkup(row_width=5)
-    
-    for letter in game["letters"]:
-        markup.insert(InlineKeyboardButton(letter, callback_data=f"word_{letter}"))
-    
-    await bot.send_message(
-        chat_id,
-        f"So'z: {' '.join(game['guessed'])}\nHarflarni tanlang:",
-        reply_markup=markup
-    )
+    await show_word_board(chat_id)
 
-@dp.callback_query_handler(lambda c: c.data.startswith('word_'))
-async def process_word_letter(callback: types.CallbackQuery):
-    chat_id = callback.message.chat.id
-    if chat_id not in active_games["word"]:
+async def show_word_board(chat_id):
+    game = word_games[chat_id]
+    word_display = " ".join(game["masked"])
+
+    buttons = InlineKeyboardMarkup(row_width=5)
+    for letter in game["remaining_letters"]:
+        buttons.insert(InlineKeyboardButton(text=letter, callback_data=f"word_{letter}"))
+
+    await bot.send_message(chat_id, f"So'z: {word_display}\nHarflarni tanlang:", reply_markup=buttons)
+
+@dp.callback_query_handler(lambda call: call.data.startswith("word_"))
+async def process_word_guess(call: types.CallbackQuery):
+    chat_id = call.message.chat.id
+    game = word_games.get(chat_id)
+    if not game:
         return
-    
-    game = active_games["word"][chat_id]
-    letter = callback.data.split('_')[1]
-    
-    # Harfni so'zda qidirish
-    for i, char in enumerate(game["word"]):
-        if char == letter and game["guessed"][i] == "_":
-            game["guessed"][i] = letter
-            game["letters"].remove(letter)
-            break
-    
-    # G'olibni tekshirish
-    if "_" not in game["guessed"]:
-        update_stats(callback.from_user.id, "word", True)
-        await callback.message.edit_text(f"🎉 Topdingiz! So'z: {game['word']}")
-        del active_games["word"][chat_id]
-    else:
-        await show_word_game(chat_id)
+
+    letter = call.data.split("_")[1]
+    next_index = game["next_index"]
+
+    if game["word"][next_index] == letter:
+        game["masked"][next_index] = letter
+        game["next_index"] += 1
+        game["remaining_letters"].remove(letter)
+
+        if "_" not in game["masked"]:
+            update_stats(call.from_user.id, "word", True)
+            await bot.send_message(chat_id, f"🎉 Siz so'zni topdingiz! So'z: {game['word']}")
+            del word_games[chat_id]
+            return
+
+    await show_word_board(chat_id)
 
 # Statistikani ko'rish
 @dp.message_handler(commands=['stats'])
