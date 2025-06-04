@@ -8,9 +8,8 @@ from keep_alive import keep_alive
 keep_alive()
 
 # Tokenni environment variablesdan olamiz
-TOKEN = os.environ.get('token')
 
-bot = Bot(token=TOKEN)
+bot = Bot(token=os.environ.get('token'))
 dp = Dispatcher(bot)
 
 # O'yinlar menyusi tugmalari
@@ -354,4 +353,4 @@ async def show_top(message: types.Message):
 
 # Botni ishga tushurish
 if __name__ == "__main__":
-    executor.start_polling(dp, skip_updates=True)
+    executor.start_polling(dp)
