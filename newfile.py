@@ -8,7 +8,7 @@ from keep_alive import keep_alive
 keep_alive()
 
 # Tokenni environment variablesdan olamiz
-TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
+TOKEN = os.environ.get('token')
 
 bot = Bot(token=TOKEN)
 dp = Dispatcher(bot)
